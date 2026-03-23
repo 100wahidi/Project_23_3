@@ -1,0 +1,92 @@
+:root {
+  --font-size: 16px;
+  --background: #0b1020;
+  --foreground: #e5e7eb;
+  --card: #111934;
+  --card-foreground: #e5e7eb;
+  --popover: #111934;
+  --popover-foreground: #e5e7eb;
+  --primary: #7c5cff;
+  --primary-foreground: #ffffff;
+  --secondary: #1a2447;
+  --secondary-foreground: #e5e7eb;
+  --muted: #141d3a;
+  --muted-foreground: #94a3b8;
+  --accent: #1d2c5a;
+  --accent-foreground: #dbeafe;
+  --destructive: #fb7185;
+  --destructive-foreground: #ffffff;
+  --border: #263252;
+  --input: #263252;
+  --input-background: #111934;
+  --switch-background: #334155;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: #8b5cf6;
+  --chart-1: #7c5cff;
+  --chart-2: #38bdf8;
+  --chart-3: #22c55e;
+  --chart-4: #f59e0b;
+  --chart-5: #fb7185;
+  --radius: 0.625rem;
+  --sidebar: #0b1020;
+  --sidebar-foreground: #e5e7eb;
+  --sidebar-primary: #7c5cff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #141d3a;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #263252;
+  --sidebar-ring: #8b5cf6;
+}
+
+.dark {
+  --background: #0b1020;
+  --foreground: #e5e7eb;
+  --card: #111934;
+  --card-foreground: #e5e7eb;
+  --popover: #111934;
+  --popover-foreground: #e5e7eb;
+  --primary: #7c5cff;
+  --primary-foreground: #ffffff;
+  --secondary: #1a2447;
+  --secondary-foreground: #e5e7eb;
+  --muted: #141d3a;
+  --muted-foreground: #94a3b8;
+  --accent: #1d2c5a;
+  --accent-foreground: #ffffff;
+  --destructive: #fb7185;
+  --destructive-foreground: #ffffff;
+  --border: #263252;
+  --input: #263252;
+  --ring: #8b5cf6;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --chart-1: #7c5cff;
+  --chart-2: #38bdf8;
+  --chart-3: #22c55e;
+  --chart-4: #f59e0b;
+  --chart-5: #fb7185;
+  --sidebar: #0b1020;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-primary: #7c5cff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #141d3a;
+  --sidebar-accent-foreground: #e2e8f0;
+  --sidebar-border: #263252;
+  --sidebar-ring: #8b5cf6;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: hsl(var(--foreground));
+  background:
+    radial-gradient(circle at top left, rgba(124, 92, 255, 0.18), transparent 28%),
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.12), transparent 24%),
+    linear-gradient(180deg, #0b1020 0%, #0f1730 100%);
+}
