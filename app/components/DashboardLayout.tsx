@@ -1,4 +1,4 @@
-import { Database, LayoutDashboard, LogOut, PanelLeft, ShieldCheck } from 'lucide-react';
+import { BarChart3, Database, LayoutDashboard, LogOut, PanelLeft, ShieldCheck } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { auth } from '../lib/firebase.ts';
@@ -17,6 +17,11 @@ const navItems = [
     to: '/technical',
     label: 'Technical Data Quality',
     icon: Database,
+  },
+  {
+    to: '/kri-analytics',
+    label: 'KRI Analytics',
+    icon: BarChart3,
   },
 ];
 
@@ -37,7 +42,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <ShieldCheck className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-lg font-semibold tracking-[0.18em] text-white">BERRY</div>
+              <div className="text-lg font-semibold tracking-[0.18em] text-white">KRI Factory</div>
               <div className="text-xs uppercase tracking-[0.22em] text-slate-400">Data Quality</div>
             </div>
           </Link>
@@ -79,7 +84,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Session</p>
             <p className="mt-2 text-sm font-medium text-white">Offline mock data</p>
-            <p className="mt-1 text-xs leading-5 text-slate-400">Use the overview to compare unique and duplicate lines.</p>
+            <p className="mt-1 text-xs leading-5 text-slate-400">Use the overview, technical page, and KRI analytics to inspect the dataset from different angles.</p>
             <button
               type="button"
               onClick={handleLogout}

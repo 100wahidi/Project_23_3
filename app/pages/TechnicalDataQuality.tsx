@@ -19,8 +19,15 @@ type ValidationResult = {
   report: ValidationFailure[];
 };
 
-function isRecordArray(value: unknown): value is LoadingRecord[] {
-  return Array.isArray(value);
+type LoadingResult = {
+  total_rows: number;
+  page: number;
+  page_size: number;
+  data: LoadingRecord[];
+};
+
+function isLoadingResult(value: unknown): value is LoadingResult {
+  return Boolean(value && typeof value === 'object' && Array.isArray((value as LoadingResult).data));
 }
 
 type GroupedCheck = {
@@ -73,20 +80,51 @@ function groupValidationReport(report: ValidationFailure[] = []) {
   }, {});
 }
 
-function MetricCard({
-  label,
-  value,
-  hint,
+function getSeverityLabel(percent: number) {
+  if (percent >= 35) return { label: 'Critical', tone: 'text-rose-200', fill: 'from-rose-400 to-red-500' } as const;
+  if (percent >= 20) return { label: 'High', tone: 'text-orange-200', fill: 'from-orange-400 to-amber-500' } as const;
+  if (percent >= 10) return { label: 'Medium', tone: 'text-amber-200', fill: 'from-amber-400 to-yellow-400' } as const;
+  return { label: 'Low', tone: 'text-cyan-200', fill: 'from-cyan-400 to-blue-400' } as const;
+}
+
+function CheckCard({
+  check,
+  count,
+  total,
 }: {
-  label: string;
-  value: string | number;
-  hint?: string;
+  check: string;
+  count: number;
+  total: number;
 }) {
+  const percent = total > 0 ? (count / total) * 100 : 0;
+  const severity = getSeverityLabel(percent);
+
   return (
-    <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-      <p className="text-sm text-slate-400">{label}</p>
-      <p className="mt-2 text-3xl font-semibold text-white">{value}</p>
-      {hint ? <p className="mt-2 text-xs text-slate-500">{hint}</p> : null}
+    <div className="rounded-2xl border border-white/5 bg-[#0d1530] p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm text-slate-400">Check type</p>
+          <p className="mt-2 text-lg font-semibold text-white">{check}</p>
+        </div>
+        <span className={`rounded-full border border-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${severity.tone}`}>
+          {severity.label}
+        </span>
+      </div>
+
+      <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/5">
+        <div className={`h-full rounded-full bg-gradient-to-r ${severity.fill}`} style={{ width: `${Math.min(100, Math.max(6, percent))}%` }} />
+      </div>
+
+      <div className="mt-4 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-3xl font-semibold text-white">{count}</p>
+          <p className="mt-1 text-xs text-slate-500">{percent.toFixed(1)}% of all issues</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-right">
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Gravity</p>
+          <p className={`mt-1 text-sm font-semibold ${severity.tone}`}>{severity.label}</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -94,15 +132,12 @@ function MetricCard({
 export default function TechnicalDataQuality() {
   const [rawData, setRawData] = useState<LoadingRecord[]>(technicalDataRows as LoadingRecord[]);
   const [validation, setValidation] = useState<ValidationResult>(technicalValidationMock as ValidationResult);
+  const [loadedRows, setLoadedRows] = useState<number>(technicalDataRows.length);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const columns = useMemo(() => Object.keys(rawData[0] ?? {}), [rawData]);
 
-  const groupedReport = useMemo(
-    () => groupValidationReport(validation?.report ?? []),
-    [validation],
-  );
-
+  const groupedReport = useMemo(() => groupValidationReport(validation?.report ?? []), [validation]);
   const reportColumns = useMemo(() => Object.values(groupedReport), [groupedReport]);
 
   const reportByIndex = useMemo(() => {
@@ -114,6 +149,20 @@ export default function TechnicalDataQuality() {
       map.get(index)!.push(entry);
     });
     return map;
+  }, [validation]);
+
+  const checkSummary = useMemo(() => {
+    const totalIssues = validation?.report.length ?? 0;
+    const counts = new Map<string, number>();
+
+    (validation?.report ?? []).forEach((entry) => {
+      const check = formatCellValue(entry.check);
+      counts.set(check, (counts.get(check) ?? 0) + 1);
+    });
+
+    return Array.from(counts.entries())
+      .map(([check, count]) => ({ check, count, percent: totalIssues > 0 ? (count / totalIssues) * 100 : 0 }))
+      .sort((left, right) => right.count - left.count);
   }, [validation]);
 
   const [selectedColumn, setSelectedColumn] = useState<string>(reportColumns[0]?.column ?? '');
@@ -155,14 +204,15 @@ export default function TechnicalDataQuality() {
         setError('');
 
         const [loadingResponse, validationResponse] = await Promise.all([
-          apiFetch<unknown>('/loading', { method: 'POST' }),
+          apiFetch<LoadingResult>('/loading?page=1&page_size=200', { method: 'GET' }),
           apiFetch<ValidationResult>('/validation', { method: 'POST' }),
         ]);
 
         if (!active) return;
 
-        if (isRecordArray(loadingResponse)) {
-          setRawData(loadingResponse);
+        if (isLoadingResult(loadingResponse)) {
+          setRawData(loadingResponse.data);
+          setLoadedRows(loadingResponse.total_rows);
         } else {
           throw new Error('Unexpected /loading response shape');
         }
@@ -225,17 +275,13 @@ export default function TechnicalDataQuality() {
               Technical Data Quality
             </div>
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-white">
-                Technical validation view
-              </h1>
-              <p className="text-sm text-slate-400">
-                Optimized drill-down view for validation issues and linked source rows.
-              </p>
+              <h1 className="text-2xl font-semibold tracking-tight text-white">Technical validation view</h1>
+              <p className="text-sm text-slate-400">Optimized drill-down view for validation issues and linked source rows.</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-cyan-200">
-            Mock data only
+            Backend rows loaded
           </div>
         </div>
 
@@ -246,16 +292,17 @@ export default function TechnicalDataQuality() {
         ) : null}
 
         {loading ? (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-            Loading technical data from backend...
-          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Loading technical data from backend...</div>
         ) : null}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard label="Loaded rows" value={rawData.length} />
-          <MetricCard label="Validated rows" value={validation?.total_rows ?? 0} />
-          <MetricCard label="Validation issues" value={issueCount} />
-          <MetricCard label="Status" value="Validation ready" />
+          {checkSummary.slice(0, 4).map((item) => (
+            <CheckCard key={item.check} check={item.check} count={item.count} total={issueCount} />
+          ))}
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+          {issueCount} validation issues across {checkSummary.length} check type{checkSummary.length === 1 ? '' : 's'}.
         </div>
 
         <section className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
@@ -349,8 +396,7 @@ export default function TechnicalDataQuality() {
                 <div>
                   <h2 className="text-lg font-semibold text-white">Drill-down details</h2>
                   <p className="text-sm text-slate-400">
-                    Selected column: {selectedColumn || '—'} · check: {selectedCheck} · index:{' '}
-                    {selectedIndex ?? 'all'}
+                    Selected column: {selectedColumn || '—'} · check: {selectedCheck} · index: {selectedIndex ?? 'all'}
                   </p>
                 </div>
                 <FileSpreadsheet className="h-5 w-5 text-slate-400" />
@@ -367,9 +413,7 @@ export default function TechnicalDataQuality() {
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-wide text-slate-500">Failure case</p>
-                  <p className="mt-1 text-sm text-white">
-                    {selectedEntry ? formatCellValue(selectedEntry.failure_case) : '—'}
-                  </p>
+                  <p className="mt-1 text-sm text-white">{selectedEntry ? formatCellValue(selectedEntry.failure_case) : '—'}</p>
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-wide text-slate-500">Index</p>
@@ -416,101 +460,6 @@ export default function TechnicalDataQuality() {
               </div>
             </section>
 
-            <section className="rounded-3xl border border-border bg-card shadow-sm">
-              <div className="flex items-center justify-between border-b border-white/5 p-6">
-                <div>
-                  <h2 className="text-lg font-semibold text-white">Technical records</h2>
-                  <p className="text-sm text-slate-400">Click any row to set it as the active linked record.</p>
-                </div>
-                <div className="text-sm text-slate-400">
-                  {affectedRowsCount} affected row{affectedRowsCount === 1 ? '' : 's'}
-                </div>
-              </div>
-
-              <div className="overflow-auto">
-                <table className="w-full border-collapse text-sm">
-                  <thead className="sticky top-0 bg-[#0d1530]">
-                    <tr className="border-b border-white/5 text-left text-slate-400">
-                      {columns.map((column) => (
-                        <th key={column} className="whitespace-nowrap px-4 py-3 font-medium">
-                          {column}
-                        </th>
-                      ))}
-                      <th className="whitespace-nowrap px-4 py-3 font-medium">Issues</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rawData.map((row, rowIndex) => {
-                      const issues = reportByIndex.get(rowIndex) ?? [];
-                      const isSelected = selectedIndex === rowIndex;
-
-                      return (
-                        <tr
-                          key={rowIndex}
-                          className={`border-b border-white/5 hover:bg-white/5 ${isSelected ? 'bg-cyan-400/10' : ''}`}
-                          onClick={() => selectRow(rowIndex)}
-                        >
-                          {columns.map((column) => (
-                            <td key={column} className="whitespace-nowrap px-4 py-3 align-top text-slate-300">
-                              {formatCellValue(row[column])}
-                            </td>
-                          ))}
-                          <td className="whitespace-nowrap px-4 py-3 align-top">
-                            <div className="flex flex-wrap gap-2">
-                              {issues.length ? (
-                                issues.map((issue, idx) => (
-                                  <span
-                                    key={`${issue.check}-${idx}`}
-                                    className="rounded-full border border-rose-400/20 bg-rose-400/10 px-2.5 py-1 text-xs text-rose-200"
-                                  >
-                                    {formatCellValue(issue.check)}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-xs text-emerald-200">
-                                  OK
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-white">Validation report</h2>
-              <div className="mt-4 overflow-auto">
-                <table className="w-full border-collapse text-sm">
-                  <thead>
-                    <tr className="border-b border-white/5 text-left text-slate-400">
-                      <th className="px-4 py-3 font-medium">Column</th>
-                      <th className="px-4 py-3 font-medium">Check</th>
-                      <th className="px-4 py-3 font-medium">Failure case</th>
-                      <th className="px-4 py-3 font-medium">Index</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {validation.report.map((item, index) => (
-                      <tr
-                        key={`${item.column ?? 'unknown'}-${index}`}
-                        className="border-b border-white/5 hover:bg-white/5"
-                      >
-                        <td className="px-4 py-3 text-slate-300">{item.column ?? '—'}</td>
-                        <td className="px-4 py-3 text-slate-300">{item.check ?? '—'}</td>
-                        <td className="px-4 py-3 text-slate-300">
-                          {formatCellValue(item.failure_case)}
-                        </td>
-                        <td className="px-4 py-3 text-slate-300">{item.index ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
           </main>
         </section>
       </div>
