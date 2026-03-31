@@ -19,15 +19,16 @@ type ValidationResult = {
   report: ValidationFailure[];
 };
 
-type LoadingResult = {
-  total_rows: number;
-  page: number;
-  page_size: number;
-  data: LoadingRecord[];
-};
+function formatCellValue(value: LoadingRecord[string] | null | undefined) {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  const text = String(value).trim();
+  return text ? text : '—';
+}
 
-function isLoadingResult(value: unknown): value is LoadingResult {
-  return Boolean(value && typeof value === 'object' && Array.isArray((value as LoadingResult).data));
+function normalizeIndex(value: unknown) {
+  const index = Number(value);
+  return Number.isFinite(index) ? index : null;
 }
 
 type GroupedCheck = {
@@ -40,18 +41,6 @@ type GroupedColumn = {
   entries: ValidationFailure[];
   checks: Record<string, GroupedCheck>;
 };
-
-function formatCellValue(value: LoadingRecord[string] | null | undefined) {
-  if (value === null || value === undefined) return '—';
-  if (typeof value === 'boolean') return value ? 'true' : 'false';
-  const text = String(value).trim();
-  return text ? text : '—';
-}
-
-function normalizeIndex(value: unknown) {
-  const index = Number(value);
-  return Number.isFinite(index) ? index : null;
-}
 
 function groupValidationReport(report: ValidationFailure[] = []) {
   return report.reduce<Record<string, GroupedColumn>>((acc, entry) => {
@@ -203,20 +192,17 @@ export default function TechnicalDataQuality() {
         setLoading(true);
         setError('');
 
+        // IMPORTANT:
+        // /loading now returns ONLY an array of records (JSON list), not an object wrapper.
         const [loadingResponse, validationResponse] = await Promise.all([
-          apiFetch<LoadingResult>('/loading?page=1&page_size=200', { method: 'GET' }),
+          apiFetch<LoadingRecord[]>('/loading', { method: 'GET' }),
           apiFetch<ValidationResult>('/validation', { method: 'POST' }),
         ]);
 
         if (!active) return;
 
-        if (isLoadingResult(loadingResponse)) {
-          setRawData(loadingResponse.data);
-          setLoadedRows(loadingResponse.total_rows);
-        } else {
-          throw new Error('Unexpected /loading response shape');
-        }
-
+        setRawData(Array.isArray(loadingResponse) ? loadingResponse : []);
+        setLoadedRows(Array.isArray(loadingResponse) ? loadingResponse.length : 0);
         setValidation(validationResponse);
       } catch (fetchError) {
         if (!active) return;
@@ -224,6 +210,7 @@ export default function TechnicalDataQuality() {
         setError(fetchError instanceof Error ? fetchError.message : 'Failed to load technical data.');
         setRawData(technicalDataRows as LoadingRecord[]);
         setValidation(technicalValidationMock as ValidationResult);
+        setLoadedRows(technicalDataRows.length);
       } finally {
         if (active) {
           setLoading(false);
@@ -259,10 +246,6 @@ export default function TechnicalDataQuality() {
     setSelectedIndex(indexValue);
     setOpenColumns((prev) => ({ ...prev, [column]: true }));
     setOpenChecks((prev) => ({ ...prev, [`${column}::${check}`]: true }));
-  };
-
-  const selectRow = (indexValue: number | null) => {
-    setSelectedIndex(indexValue);
   };
 
   return (
@@ -303,6 +286,9 @@ export default function TechnicalDataQuality() {
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
           {issueCount} validation issues across {checkSummary.length} check type{checkSummary.length === 1 ? '' : 's'}.
+          <span className="ml-2 text-slate-400">
+            Loaded rows: {loadedRows} · Affected rows: {affectedRowsCount} · Impacted columns: {impactedColumnsCount}
+          </span>
         </div>
 
         <section className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
@@ -352,14 +338,14 @@ export default function TechnicalDataQuality() {
                                   <div className="space-y-2 px-3 pb-3">
                                     {checkGroup.entries.map((entry, idx) => {
                                       const rowIndex = normalizeIndex(entry.index);
-                                      const active = selectedIndex === rowIndex;
+                                      const activeRow = selectedIndex === rowIndex;
 
                                       return (
                                         <button
                                           key={`${checkKey}-${idx}`}
                                           type="button"
                                           className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition ${
-                                            active
+                                            activeRow
                                               ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-100'
                                               : 'border-white/5 bg-white/5 text-slate-300 hover:bg-white/10'
                                           }`}
@@ -459,7 +445,6 @@ export default function TechnicalDataQuality() {
                 ) : null}
               </div>
             </section>
-
           </main>
         </section>
       </div>
